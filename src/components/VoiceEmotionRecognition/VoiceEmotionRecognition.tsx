@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as tf from "@tensorflow/tfjs";
 import { MicrophoneIterator } from "../../../node_modules/@tensorflow/tfjs-data/dist/iterators/microphone_iterator";
-import { Microphone } from "../../assets/icons";
 
 const VoiceEmotionRecogniton = () => {
 
