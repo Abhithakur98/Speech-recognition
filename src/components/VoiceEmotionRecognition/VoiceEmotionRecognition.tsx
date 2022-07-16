@@ -1,32 +1,33 @@
-import * as tf from "@tensorflow/tfjs";
-import * as SpeechCommand from "@tensorflow-models/speech-commands";
-import * as spectrogram from "spectrogram";
 import { useEffect, useRef, useState } from "react";
-import { Tensor } from "@tensorflow/tfjs";
+import * as tf from "@tensorflow/tfjs";
+import { MicrophoneIterator } from "../../../node_modules/@tensorflow/tfjs-data/dist/iterators/microphone_iterator";
+import { Microphone } from "../../assets/icons";
+import { LayersModel } from "@tensorflow/tfjs";
 
 const VoiceEmotionRecogniton = () => {
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [model, setModel] = useState<tf.LayersModel | null>(null);
-  const [spectro, setSpectro] = useState<spectrogram | null>(null);
+  const [modelLoaded, setModelLoaded] = useState<boolean>(false);
+  const microphoneIterator = useRef<MicrophoneIterator | null>(null);
+  const [microphoneActive, setMicrophoneActive] = useState<boolean>(false);
+
+  const Emotions: string[] = [
+    "Female, Angry",
+    "Female, Calm",
+    "Female, Fearful",
+    "Female, Happy",
+    "Female, Sad",
+    "Male, Angry",
+    "Male, Calm",
+    "Male, Fearful",
+    "Male, Happy",
+    "Male, Sad"
+  ];
 
   useEffect(() => {
-    // loadAudio();
     loadModel();
-
-    // setSpectro(spectrogram(canvasRef.current!, {
-    //   audio: {enable: true},
-    //   canvas: {
-    //     width: 640,
-    //     height: 480
-    //   }
-    // }));
-
+    loadMicrophoneIterator();
   }, []);
-
-  // useEffect(() => {
-  //   someFunc();
-  // }, []);
 
   const someFunc = async () => {
     const mic = await tf.data.microphone({
@@ -45,70 +46,136 @@ const VoiceEmotionRecogniton = () => {
       const x = await mic.next();
       if (x) {
         console.log(x.value);
-        const spectrogram: Tensor = x.value.spectrogram;
+        const spectrogram: tf.Tensor = x.value.spectrogram;
         console.log(model?.predict(spectrogram).toString(true));
       }
       mic.stop();
-      // const spectrogramTensor = audioData[0].spectrogram;
-      // spectrogramTensor.print();
-      // const waveformTensor = audioData.waveform;
-      // waveformTensor.print();
     }, 3000);
   };
 
-  const loadAudio = () => {
-    navigator.mediaDevices.getUserMedia({audio: true, video: false})
-    .then((audioStream) => {
-      // const audioCtx = new window.AudioContext();
-      // const audioBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate*3, audioCtx.sampleRate);
-      // // audioBuffer.copyFromChannel(audioStream.getAudioTracks()[0], 1, 0.5);
-      // new Float32Array(audioStream.getAudioTracks()[0]);
+  const processAudio = async () => {
+    const mic = await tf.data.microphone({
+      fftSize: 1024,
+      columnTruncateLength: 216,
+      numFramesPerSpectrogram: 1,
+      // sampleRateHz:48000,
+      includeSpectrogram: true,
+      includeWaveform: true
+    });
+    mic.start();
+    setTimeout(async () => {
+      // (await mic.toArray()).forEach((tensor) => {
+      //   tensor.print();
+      // });
+      const x = await mic.next();
+      if (x) {
+        console.log(x.value);
+        const spectrogram: tf.Tensor = x.value.spectrogram;
+        if (modelLoaded) {
+          const predictions = model!.predict(spectrogram, {batchSize: 32, verbose: true}) as tf.Tensor;
+          const predictions1 = predictions.argMax(1);
+          console.log("Emotion:", Emotions[(predictions1.arraySync() as number[])[0]]);
 
-      
+          predictions.dispose();
+          predictions1.dispose();
+        }
+
+        // disposing tensors
+        spectrogram.dispose();
+      }
+      mic.stop();
+    }, 3000);
+  };
+
+  const loadMicrophoneIterator = async () => {
+    tf.data.microphone({
+      fftSize: 1024,
+      columnTruncateLength: 216,
+      numFramesPerSpectrogram: 1,
+      // sampleRateHz:48000,
+      includeSpectrogram: true,
+      includeWaveform: true
     })
-    .catch((err) => console.log("Log: Error while getting audio stream: ", err));
+      .then((iterator) => {
+        microphoneIterator.current = iterator;
+        console.log("Log: Microphone Iterator loaded.");
+      });
   };
 
   const loadModel = () => {
     tf.loadLayersModel("/converted_models/emotion_voice_recognition/model.json")
     .then(async (layersModel) => {
       setModel(layersModel);
+      setModelLoaded(true);
       console.log("Log: Model loaded: ", layersModel);
-      const mic = await tf.data.microphone({
-        fftSize: 1024,
-        columnTruncateLength: 216,
-        numFramesPerSpectrogram: 1,
-        // sampleRateHz:48000,
-        includeSpectrogram: true,
-        includeWaveform: true
-      });
-      mic.start();
-      setTimeout(async () => {
-        // (await mic.toArray()).forEach((tensor) => {
-        //   tensor.print();
-        // });
-        const x = await mic.next();
-        if (x) {
-          console.log(x.value);
-          const spectrogram: Tensor = x.value.spectrogram;
-          const predictions = layersModel.predict(spectrogram, {batchSize: 32, verbose: true}) as tf.Tensor;
-          const predictions1 = predictions.argMax(1);
-          const abc = predictions1.flatten();
-          console.log("Emotion:", (predictions1.arraySync() as number[])[0]);
-          // console.log((predictions.arraySync() as number[][])[0]);
-        }
-        mic.stop();
-        // const spectrogramTensor = audioData[0].spectrogram;
-        // spectrogramTensor.print();
-        // const waveformTensor = audioData.waveform;
-        // waveformTensor.print();
-      }, 3000);
+      // const mic = await tf.data.microphone({
+      //   fftSize: 1024,
+      //   columnTruncateLength: 216,
+      //   numFramesPerSpectrogram: 1,
+      //   // sampleRateHz:48000,
+      //   includeSpectrogram: true,
+      //   includeWaveform: true
+      // });
+      // mic.start();
+      // setTimeout(async () => {
+      //   // (await mic.toArray()).forEach((tensor) => {
+      //   //   tensor.print();
+      //   // });
+      //   const x = await mic.next();
+      //   if (x) {
+      //     console.log(x.value);
+      //     const spectrogram: tf.Tensor = x.value.spectrogram;
+      //     const predictions = layersModel.predict(spectrogram, {batchSize: 32, verbose: true}) as tf.Tensor;
+      //     const predictions1 = predictions.argMax(1);
+      //     console.log("Emotion:", Emotions[(predictions1.arraySync() as number[])[0]]);
+
+      //     // disposing tensors
+      //     spectrogram.dispose();
+      //     predictions.dispose();
+      //     predictions1.dispose();
+      //   }
+      //   mic.stop();
+      // }, 3000);
     })
     .catch((err) => console.log("Log: Error while loading model: ", err));
   };
 
+  const startProcessingAudio = () => {
+    microphoneIterator.current?.start();
+  };
+
+  const stopProcessingAudio = async () => {
+    // while (true) {
+    //   const x = await microphoneIterator.current?.next();
+    //   if (!x?.done) {
+    //     const spectrogram: tf.Tensor = (x?.value as any).spectrogram;
+    //     const predictions = (model?.predict(spectrogram, {batchSize: 32, verbose: true}) as tf.Tensor).argMax(1);
+    //     console.log("Emotion: ", Emotions[(predictions.arraySync() as number[])[0]])
+    //   }
+    //   else {
+    //     break;
+    //   }
+    // }
+    const x = await microphoneIterator.current?.next();
+    const spectrogram: tf.Tensor = (x?.value as any).spectrogram;
+    const predictions = (model?.predict(spectrogram, {batchSize: 32, verbose: true}) as tf.Tensor).argMax(1);
+    console.log("Emotion: ", Emotions[(predictions.arraySync() as number[])[0]]);
+    microphoneIterator.current?.stop();
+  };
+
+  const handleClick = () => {
+    setMicrophoneActive((active) => {
+      if (active) {
+        stopProcessingAudio();
+        return false;
+      }
+      startProcessingAudio();
+      return true;
+    });
+  };
+
   return (
-    <canvas ref={canvasRef}></canvas>
+    <Microphone width={200} height={200} color={microphoneActive ? "#bb86fc" : "#413d47"} onClick={handleClick} />
   );
 
 };
